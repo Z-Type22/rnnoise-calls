@@ -1,10 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, Depends, Response
+from fastapi import HTTPException, Response
 from src.config import settings
-from src.database import get_db
 from src.users import models
-from src.auth.schemas import UserCreate, UserLogin, TokensSchema
-from src.users.schemas import UserRead
+from src.auth.schemas import UserCreate, UserLogin
 from src.auth.utils import get_password_hash, verify_password
 from src.auth.jwt_service import (
     create_access_token, 
@@ -12,11 +10,12 @@ from src.auth.jwt_service import (
     blacklist_token,
     check_refresh_token
 )
+from src.types import Errors, DatabaseSession
 from sqlalchemy import select
 
 
-async def create_user(user: UserCreate, db: AsyncSession):
-    errors = []
+async def create_user(user: UserCreate, db: AsyncSession) -> models.User:
+    errors: list[Errors] = []
 
     existing = await db.execute(select(models.User).where(models.User.email == user.email))
     if existing.scalar_one_or_none():
@@ -38,8 +37,7 @@ async def create_user(user: UserCreate, db: AsyncSession):
             "ctx": {}
         })
 
-    if errors:
-        raise HTTPException(status_code=422, detail=errors)
+    if errors: raise HTTPException(status_code=422, detail=errors)
     
     new_user = models.User(
         username=user.username,
@@ -52,41 +50,36 @@ async def create_user(user: UserCreate, db: AsyncSession):
     await db.commit()
     await db.refresh(new_user)
 
-    return UserRead.model_validate(new_user)
+    return new_user
 
-async def authenticate_user(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(models.User)
-        .where(
+async def authenticate_user(credentials: UserLogin, db: DatabaseSession):
+    errors: list[Errors] = []
+    
+    user = await db.scalar(
+        select(models.User).where(
             models.User.username == credentials.username, 
             models.User.is_active == True
         )
     )
-    user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail=[{
-                "loc": ["body", "username"],
-                "msg": "User not found.",
-                "type": "value_error",
-                "input": credentials.username,
-                "ctx": {}
-            }],
-        )
-
+        errors.append({
+            "loc": ["body", "username"],
+            "msg": "User not found.",
+            "type": "value_error",
+            "input": credentials.username,
+            "ctx": {}
+        })
     if not verify_password(credentials.password, user.password):
-        raise HTTPException(
-            status_code=401,
-            detail=[{
-                "loc": ["body", "password"],
-                "msg": "Incorrect username or password.",
-                "type": "value_error",
-                "input": credentials.password,
-                "ctx": {}
-            }],
-        )
+        errors.append({
+            "loc": ["body", "password"],
+            "msg": "Incorrect username or password.",
+            "type": "value_error",
+            "input": credentials.password,
+            "ctx": {}
+        })
+
+    if errors: raise HTTPException(status_code=401, detail=errors)
 
     return user
 
@@ -108,15 +101,10 @@ async def set_tokens(response: Response, user: UserLogin):
         **settings.cookies.cookie_params,
     )
 
-    return TokensSchema(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    return {"access_token": access_token, "refresh_token": refresh_token}
 
-async def get_access_token(
-    response: Response, refresh_token: str | None
-):
-    payload = await check_refresh_token(refresh_token)
+async def get_access_token(response: Response, refresh_token: str | None):
+    payload = check_refresh_token(refresh_token)
     new_access_token = create_access_token(payload["sub"])
 
     response.set_cookie(
@@ -133,7 +121,6 @@ async def set_logout(
     refresh_token: str | None, db: AsyncSession,
 ):
     if access_token: await blacklist_token(access_token, db)
-
     if refresh_token: await blacklist_token(refresh_token, db)
 
     response.delete_cookie(settings.cookies.access_cookie_name)

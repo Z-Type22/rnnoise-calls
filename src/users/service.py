@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.users.models import User
 from sqlalchemy import select, or_
-from sqlalchemy.orm import selectinload
 from fastapi import UploadFile, HTTPException
 from src.calls.service import rooms
 from src.calls.models import Call
@@ -10,64 +9,42 @@ from pathlib import Path
 import shutil
 
 
-async def get_users(
-    user: User, db: AsyncSession, 
-    page: int, limit: int
-):
+async def read_users(
+    user: User, db: AsyncSession, page: int, limit: int
+) -> list[User]:
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(User)
-        .where(User.id != user.id)
-        .offset(offset)
-        .limit(limit)
-    )
-    return result.scalars().all()
+    result = (await db.scalars(
+        select(User).where(User.id != user.id).offset(offset).limit(limit)
+    )).all()
+    return result
 
-async def get_connected_users(
+async def connected_users(
     call_uuid: str, user: User, db: AsyncSession
-):
-    result = await db.execute(
-        select(Call)
-        .options(
-            selectinload(Call.callees),
-            selectinload(Call.caller)
-        )
-        .where(
-            Call.uuid == call_uuid,
+) -> list[User]:
+    call = await db.scalar(
+        select(Call).where(Call.uuid == call_uuid,
             or_(
                 Call.callees.any(id=user.id),
                 Call.caller_id == user.id
             )
         )
     )
-    call = result.scalar_one_or_none()
-    if not call:
+    if not call: 
         raise HTTPException(detail="Call not found.", status_code=404)
     
     if call_uuid not in rooms: return []
 
-    user_ids = [
-        item["user_id"]
-        for item in rooms[call_uuid]
-    ]
-
+    user_ids = [item["user_id"] for item in rooms[call_uuid]]
     if not user_ids: return []
 
-    stmt = select(User).where(User.id.in_(user_ids))
-    result = await db.execute(stmt)
-    users = result.scalars().all()
-
+    users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
     return users
 
-async def get_search_users(q: str, user: User, db: AsyncSession):
-    stmt = select(User).where(User.username.ilike(f"%{q}%"), User.id != user.id)
-    result = await db.execute(stmt)
-    users = result.scalars().all()
+async def search_users(q: str, user: User, db: AsyncSession) -> list[User]:
+    users = (await db.scalars(select(User).where(User.username.ilike(f"%{q}%"), User.id != user.id))).all()
     return users
 
-async def set_avatar(
-    user: User, upload_file: UploadFile, db: AsyncSession
-):    
+async def upload_avatar(user: User, upload_file: UploadFile, db: AsyncSession) -> dict:    
     AVATAR_DIR = settings.avatar_dir
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +79,7 @@ async def set_avatar(
         old_filename = user.avatar.replace(
             settings.avatar_dir_prefix, ""
         )
-        old_file_path = AVATAR_DIR / old_filename
+        old_file_path: Path = AVATAR_DIR / old_filename
 
         if old_file_path.exists() and old_file_path.is_file():
             old_file_path.unlink()

@@ -1,7 +1,6 @@
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription, AudioStreamTrack
 from aiortc.contrib.media import MediaRelay
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -11,22 +10,18 @@ from src.calls.models import Call
 from src.calls.denoise import FrameSplitterTrack
 from src.calls.schemas import CalleeSchema, CallCreate, UserRead
 from src.calls.utils import get_user_and_call, cleanup_peer
+from src.types import Peer
 
 
 relay: MediaRelay = MediaRelay()
-rooms: dict[str, list] = {}
+rooms: dict[str, list[Peer]] = {} 
 
-async def set_offer(websocket: WebSocket, user, db):
+async def offer(websocket: WebSocket, user: User, db: AsyncSession) -> None:
     await websocket.accept()
     data = await websocket.receive_json()
     call_id = data["call_id"]
 
-    result = await db.execute(
-        select(Call)
-        .options(selectinload(Call.callees))
-        .where(Call.uuid == call_id)
-    )
-    call = result.scalar_one_or_none()
+    call = await db.scalar(select(Call).where(Call.uuid == call_id))
     if not call or (user.id != call.caller_id and user not in call.callees):
         await websocket.close(code=1008)
         return
@@ -34,7 +29,7 @@ async def set_offer(websocket: WebSocket, user, db):
     pc = RTCPeerConnection()
     audio_transceiver = pc.addTransceiver("audio", direction="sendrecv")
 
-    peer = {
+    peer: Peer = {
         "ws": websocket,
         "pc": pc,
         "user": user,
@@ -55,7 +50,7 @@ async def set_offer(websocket: WebSocket, user, db):
         })
 
     @pc.on("track")
-    def on_track(track):
+    def on_track(track: AudioStreamTrack):
         if track.kind != "audio": return
 
         print(f"[{call_id}] audio track from {user.id}")
@@ -75,12 +70,7 @@ async def set_offer(websocket: WebSocket, user, db):
         if pc.connectionState in ("failed", "disconnected", "closed"):
             await cleanup_peer(rooms, call_id, user.id)
 
-    await pc.setRemoteDescription(
-        RTCSessionDescription(
-            sdp=data["sdp"],
-            type=data["type"]
-        )
-    )
+    await pc.setRemoteDescription(RTCSessionDescription(sdp=data["sdp"], type=data["type"]))
 
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
@@ -110,45 +100,23 @@ async def set_offer(websocket: WebSocket, user, db):
 
         await pc.close()
 
-async def get_my_calls(user: User, db: AsyncSession):
-    result = await db.execute(
-        select(Call).where(Call.caller_id == user.id)
-        .options(selectinload(Call.callees))
-    )
-    calls = result.scalars().all()
+async def read_calls(user: User, db: AsyncSession) -> list[Call]:
+    calls = (await db.scalars(select(Call).where(Call.caller_id == user.id))).all()
     return calls
 
-async def get_invited_calls(user: User, db: AsyncSession):
-    result = await db.execute(
-        select(Call)
-        .options(
-            selectinload(Call.callees),
-            selectinload(Call.caller)
-        )
-        .where(Call.callees.any(id=user.id))
-    )
-    calls = result.scalars().all()
+async def invited_calls(user: User, db: AsyncSession) -> list[Call]:
+    calls = (await db.scalars(select(Call).where(Call.callees.any(id=user.id)))).all()
     return calls
 
-async def get_call(
-    call_id: int, user: User, db: AsyncSession      
-):
-    result = await db.execute(
-        select(Call).where(
-            Call.caller_id == user.id,
-            Call.id == call_id
-        ).options(selectinload(Call.callees))
-    )
-    call = result.scalar_one_or_none()
+async def retrieve_call(call_id: int, user: User, db: AsyncSession) -> Call:
+    call = (await db.scalars(
+        select(Call).where(Call.caller_id == user.id, Call.id == call_id)
+    )).all()
     if not call:
-        raise HTTPException(
-            detail="Call not found.", status_code=404
-        )
+        raise HTTPException(detail="Call not found.", status_code=404)
     return call
 
-async def create_call_service(
-    data: CallCreate, user: User, db: AsyncSession
-):    
+async def create_call(data: CallCreate, user: User, db: AsyncSession) -> Call:    
     call = Call(caller_id=user.id, title=data.title)
 
     db.add(call)
@@ -157,34 +125,22 @@ async def create_call_service(
 
     return call
 
-async def delete_call_service(
-    call_id: int, user: User, db: AsyncSession
-):
-    result = await db.execute(
-        select(Call).where(
-            Call.id == call_id,
-            Call.caller_id == user.id
-        )
-    )
-    call = result.scalar_one_or_none()
+async def delete_call(call_id: int, user: User, db: AsyncSession) -> None:
+    call = (await db.scalars(
+        select(Call).where(Call.id == call_id,Call.caller_id == user.id)
+    )).all()
     if not call:
-        raise HTTPException(
-            detail="Call not found.", status_code=404
-        )
+        raise HTTPException(detail="Call not found.", status_code=404)
 
     await db.delete(call)
     await db.commit()
 
-    return {"detail": "Success."}
-
-async def add_user_to_call(
-    data: CalleeSchema, user: User, db: AsyncSession
-):
+async def add_callee(data: CalleeSchema, user: User, db: AsyncSession) -> Call:
     callee, call = await get_user_and_call(data, user, db)
     
     if callee in call.callees:
         return JSONResponse(
-            content={"detail": "User already in call"}, status_code=208
+            content={"detail": "User already in call."}, status_code=208
         )
 
     call.callees.append(callee)
@@ -194,9 +150,7 @@ async def add_user_to_call(
 
     return call
 
-async def remove_user_from_call(
-    data: CalleeSchema, user: User, db: AsyncSession
-):
+async def remove_callee(data: CalleeSchema, user: User, db: AsyncSession) -> Call:
     callee, call = await get_user_and_call(data, user, db)
     
     if callee in call.callees:

@@ -1,40 +1,26 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from typing import Tuple
 from src.users.models import User
 from src.calls.models import Call
 from src.calls.schemas import CalleeSchema
+from src.types import Peer
 
 
 async def get_user_and_call(
-    data: CalleeSchema, 
-    user: User, 
-    db: AsyncSession
-) -> Tuple:
-    result = await db.execute(
-        select(User).where(User.id == data.callee_id)
-    )
-    callee = result.scalar_one_or_none()
+    data: CalleeSchema, user: User, db: AsyncSession
+) -> tuple[User, Call]:
+    callee = await db.scalar(select(User).where(User.id == data.callee_id))
     if not callee:
-        raise HTTPException(
-            status_code=404, detail="User not found."
-        )
+        raise HTTPException(status_code=404, detail="User not found.")
     
-    result = await db.execute(
-        select(Call).where(Call.id == data.call_id, user.id == Call.caller_id)
-        .options(selectinload(Call.callees)) 
-    )
-    call = result.scalar_one_or_none()
+    call = await db.execute(select(Call).where(Call.id == data.call_id, user.id == Call.caller_id))
     if not call:
-        raise HTTPException(
-            status_code=404, detail="Call not found."
-        )
+        raise HTTPException(status_code=404, detail="Call not found.")
     
     return callee, call
 
-async def cleanup_peer(rooms, call_id, user_id):
+async def cleanup_peer(rooms: dict[str, list[Peer]], call_id: str, user_id: int) -> None:
     if call_id not in rooms: return
 
     peer_to_remove = None

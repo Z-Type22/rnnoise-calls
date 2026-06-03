@@ -10,6 +10,4 @@ class UserRead(BaseModel):
     avatar: str | None = None
     gender: User.Gender
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}

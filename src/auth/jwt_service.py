@@ -12,8 +12,10 @@ import jwt
 
 
 def create_access_token(subject: str) -> str:
+    from src.types import Payload
+    
     now = datetime.now(tz=timezone.utc)
-    payload = {
+    payload: Payload = {
         "sub": subject,
         "type": "access",
         "jti": str(uuid.uuid4()),
@@ -22,10 +24,11 @@ def create_access_token(subject: str) -> str:
     }
     return encode_jwt(payload)
 
-
 def create_refresh_token(subject: str) -> str:
+    from src.types import Payload
+
     now = datetime.now(tz=timezone.utc)
-    payload = {
+    payload: Payload = {
         "sub": subject,
         "type": "refresh",
         "jti": str(uuid.uuid4()),
@@ -34,20 +37,15 @@ def create_refresh_token(subject: str) -> str:
     }
     return encode_jwt(payload)
 
-async def check_refresh_token(refresh_token: str | None):
+def check_refresh_token(refresh_token: str | None):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
     
     try:
         payload = decode_jwt(refresh_token)
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401, detail="Refresh token has expired",
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401, detail="Invalid refresh token",
-        )
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
+        detail = "Refresh token has expired" if isinstance(e, jwt.ExpiredSignatureError) else "Invalid refresh token"
+        raise HTTPException(status_code=401, detail=detail)
 
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -61,7 +59,9 @@ async def is_token_blacklisted(jti: str, db: AsyncSession) -> bool:
     return result.scalar_one_or_none() is not None
 
 async def authorize(
-    access_token: str | None = Cookie(default=None, alias=settings.cookies.access_cookie_name),
+    access_token: str | None = Cookie(
+        default=None, alias=settings.cookies.access_cookie_name
+    ),
     db: AsyncSession = Depends(get_db)
 ) -> models.User:
     if not access_token:
@@ -72,51 +72,24 @@ async def authorize(
 
     try:
         payload = decode_jwt(access_token)
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Access token has expired",
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid access token",
-        )
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
+        detail = "Refresh token has expired" if isinstance(e, jwt.ExpiredSignatureError) else "Invalid refresh token"
+        raise HTTPException(status_code=401, detail=detail)
 
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token type",
-        )
+        raise HTTPException(status_code=401, detail="Invalid token type")
 
     if await is_token_blacklisted(payload["jti"], db):
         raise HTTPException(401, "Token revoked")
 
-    result = await db.execute(select(models.User).where(models.User.username == payload["sub"]))
-    user = result.scalar_one_or_none()
+    user = await db.scalar(select(models.User).where(models.User.username == payload["sub"]))
     if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
     return user
 
-async def blacklist_token(
-    token: str,
-    db: AsyncSession,
-):
+async def blacklist_token(token: str, db: AsyncSession):
     payload = decode_jwt(token)
-
-    expires_at = datetime.fromtimestamp(
-        payload["exp"],
-        tz=timezone.utc,
-    )
-
-    db.add(
-        TokenBlacklist(
-            jti=payload["jti"],
-            expires_at=expires_at,
-        )
-    )
+    expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc,)
+    db.add(TokenBlacklist(jti=payload["jti"], expires_at=expires_at))
     await db.commit()

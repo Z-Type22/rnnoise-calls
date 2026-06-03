@@ -2,15 +2,16 @@ import bcrypt
 import base64
 import jwt
 from src.config import settings
+from typing import Any
 
 
-def get_password_hash(password) -> str:
+def get_password_hash(password: str) -> str:
     bytes = password.encode('utf-8')
     salt = bcrypt.gensalt()
     hash = bcrypt.hashpw(bytes, salt)
     return base64.b64encode(hash).decode("utf-8")
 
-def verify_password(plain_password, hashed_password) -> bool:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     hashed_bytes = base64.b64decode(hashed_password.encode("utf-8"))
     bytes = plain_password.encode('utf-8')
     result = bcrypt.checkpw(bytes, hashed_bytes)
@@ -28,6 +29,6 @@ def decode_jwt(
     token: str | bytes, 
     public_key: str = settings.auth_jwt.public_key_path.read_text(), 
     algorithm=settings.auth_jwt.algorithm
-) -> str:
+) -> dict[str, Any]:
     decoded = jwt.decode(token, public_key, algorithms=[algorithm])
     return decoded

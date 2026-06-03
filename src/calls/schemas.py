@@ -12,9 +12,7 @@ class CallRead(BaseModel):
     created_at: datetime
     uuid: str
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 class CalleeSchema(BaseModel):
@@ -24,7 +22,3 @@ class CalleeSchema(BaseModel):
 
 class CallCreate(BaseModel):
     title: str
-
-
-class Message(BaseModel):
-    detail: str

@@ -9,7 +9,7 @@ from sqlalchemy import (
     Table,
     desc
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.sql import func
 import uuid
 
@@ -59,16 +59,16 @@ class Call(Base):
         nullable=False
     )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    caller = relationship(
+    caller: Mapped["User"] = relationship(
         User,
         foreign_keys=[caller_id],
         backref="outgoing_calls"
     )
-    callees = relationship(
+    callees: Mapped[list["User"]]  = relationship(
         User,
         secondary=call_callees,
         backref="incoming_calls",
-        lazy="noload",
+        lazy="selectin",
         order_by=desc(call_callees.c.created_at)
     )
 

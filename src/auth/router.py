@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Response, Cookie
 from src.auth.schemas import UserCreate, UserLogin
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
+from src.users.schemas import UserRead
 from src.auth.service import (
     create_user, 
     authenticate_user, 
@@ -9,43 +8,47 @@ from src.auth.service import (
     set_logout,
     get_access_token
 )
+from src.auth.schemas import TokensSchema
+from src.types import DatabaseSession
 from src.config import settings
+from src.schemas import Message
+from typing import Annotated
 
 
 router = APIRouter()
 
-@router.post("/registration")
-async def registration(user: UserCreate, db: AsyncSession = Depends(get_db)):
+@router.post("/registration", response_model=UserRead)
+async def registration(user: UserCreate, db: DatabaseSession):
     return await create_user(user, db)
 
-@router.post("/login")
+@router.post("/login", response_model=TokensSchema)
 async def login(
     response: Response,
-    user: UserLogin = Depends(authenticate_user),
+    user: Annotated[UserLogin, Depends(authenticate_user)],
 ):
     return await set_tokens(response, user)
 
 @router.post("/refresh")
 async def refresh(
     response: Response,
-    refresh_token: str | None = Cookie(
-        default=None,
-        alias=settings.cookies.refresh_cookie_name,
-    ),
+    refresh_token: Annotated[
+        str | None, 
+        Cookie(alias=settings.cookies.refresh_cookie_name)
+    ] = None,
 ):
     return await get_access_token(response, refresh_token)
 
-@router.post("/logout")
+@router.post("/logout", response_model=Message)
 async def logout(
     response: Response,
-    access_token: str | None = Cookie(
-        default=None,
-        alias=settings.cookies.access_cookie_name,
-    ),
-    refresh_token: str | None = Cookie(
-        default=None,
-        alias=settings.cookies.refresh_cookie_name,
-    ),
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession,
+    access_token: Annotated[
+        str | None, 
+        Cookie(alias=settings.cookies.access_cookie_name)
+    ] = None,
+    refresh_token: Annotated[
+        str | None, 
+        Cookie(alias=settings.cookies.refresh_cookie_name)
+    ] = None,
 ):
     return await set_logout(response, access_token, refresh_token, db)
