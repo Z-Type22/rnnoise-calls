@@ -2,8 +2,8 @@
 
 > Server-side service for noise suppression in voice calls using RNNoise
 
-- **rnnoise-calls** is a backend service designed to integrate real-time noise suppression into a WebRTC-based calling system.  
-- It is built on top of the **RNNoise**.
+**rnnoise-calls** is a backend service designed to integrate real-time noise suppression into a WebRTC-based calling system.  
+It is built on top of the **RNNoise**.
 
 ---
 
@@ -15,7 +15,14 @@ rnnoise-calls/         # Project
 ├── src/               # Core project
 │   ├── auth/          # Auth module
 │   ├── calls/         # Calls module
-│   └── users/         # Users module
+│   ├── users/         # Users module
+│   ├── users/         # Users module
+│   ├── config.py      # Config 
+│   ├── database.py    # Database connection
+│   ├── main.py        # Run app
+│   ├── middlewares.py # Middlewares app
+│   ├── schemas.py     # Schemas app
+│   └── types.py       # Types app
 ├── docker-compose.yml # Docker services
 ├── .env.example       # Env template
 ├── Dockerfile         # Docker configuration
