@@ -88,7 +88,7 @@ async def authorize(
     
     return user
 
-async def blacklist_token(token: str, db: AsyncSession):
+async def blacklist_token(token: str, db: AsyncSession) -> None:
     payload = decode_jwt(token)
     expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc,)
     db.add(TokenBlacklist(jti=payload["jti"], expires_at=expires_at))

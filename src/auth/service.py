@@ -52,7 +52,7 @@ async def create_user(user: UserCreate, db: AsyncSession) -> models.User:
 
     return new_user
 
-async def authenticate_user(credentials: UserLogin, db: DatabaseSession):
+async def authenticate_user(credentials: UserLogin, db: DatabaseSession) -> models.User:
     errors: list[Errors] = []
     
     user = await db.scalar(
@@ -83,7 +83,7 @@ async def authenticate_user(credentials: UserLogin, db: DatabaseSession):
 
     return user
 
-async def set_tokens(response: Response, user: UserLogin):
+async def set_tokens(response: Response, user: UserLogin) -> dict:
     access_token = create_access_token(user.username)
     refresh_token = create_refresh_token(user.username)
 
@@ -103,7 +103,7 @@ async def set_tokens(response: Response, user: UserLogin):
 
     return {"access_token": access_token, "refresh_token": refresh_token}
 
-async def get_access_token(response: Response, refresh_token: str | None):
+async def get_access_token(response: Response, refresh_token: str | None) -> dict:
     payload = check_refresh_token(refresh_token)
     new_access_token = create_access_token(payload["sub"])
 
@@ -119,7 +119,7 @@ async def get_access_token(response: Response, refresh_token: str | None):
 async def set_logout(
     response: Response, access_token: str | None, 
     refresh_token: str | None, db: AsyncSession,
-):
+) -> dict:
     if access_token: await blacklist_token(access_token, db)
     if refresh_token: await blacklist_token(refresh_token, db)
 
