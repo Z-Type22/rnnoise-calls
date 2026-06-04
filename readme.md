@@ -2,8 +2,8 @@
 
 > Server-side service for noise suppression in voice calls using RNNoise
 
-**rnnoise-calls** is a backend service designed to integrate real-time noise suppression into a WebRTC-based calling system.  
-It is built on top of the **RNNoise**.
+- **rnnoise-calls** is a backend service designed to integrate real-time noise suppression into a WebRTC-based calling system.  
+- It is built on top of the **RNNoise**.
 
 ---
 
@@ -26,8 +26,10 @@ rnnoise-calls/         # Project
 ```
 
 ## Run
-**make init**    - Project initialization
-**make build**   - Project build
-**make up**      - Project up (to be done after each git pull). For the future: implement CI/CD pipelines
-**make migrate** - Apply migrations
-**make down**    - Down all docker containers
+
+- **make init** — Project initialization
+- **make build** — Project build
+- **make up** — Project up (to be done after each `git pull`).  
+  _Future improvement: implement CI/CD pipelines_
+- **make migrate** — Apply migrations
+- **make down** — Stop and remove all Docker containers
