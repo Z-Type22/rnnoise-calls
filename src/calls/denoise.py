@@ -5,10 +5,9 @@ import numpy as np
 
 class FrameSplitterTrack(AudioStreamTrack):
 
-    def __init__(self, track, frame_size=960):
+    def __init__(self, track):
         super().__init__()
         self.track = track
-        self.frame_size = frame_size
         self.rnnoise = RNNoise(sample_rate=48000)
         self.initialized = False
 
