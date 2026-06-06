@@ -3,7 +3,7 @@ from pyrnnoise import RNNoise
 import numpy as np
 
 
-class FrameSplitterTrack(AudioStreamTrack):
+class DenoiseFrameTrack(AudioStreamTrack):
 
     def __init__(self, track):
         super().__init__()
