@@ -5,7 +5,7 @@ import numpy as np
 
 class DenoiseFrameTrack(AudioStreamTrack):
 
-    def __init__(self, track):
+    def __init__(self, track: AudioStreamTrack):
         super().__init__()
         self.track = track
         self.rnnoise = RNNoise(sample_rate=48000)

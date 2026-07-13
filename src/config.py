@@ -28,11 +28,11 @@ class Cookies(BaseModel):
 
 
 class Settings(BaseSettings):
-    db_host: str = Field(..., env="POSTGRES_HOST")
-    db_port: int = Field(..., env="POSTGRES_PORT")
-    db_name: str = Field(..., env="POSTGRES_DB")
-    db_user: str = Field(..., env="POSTGRES_USER")
-    db_password: str = Field(..., env="POSTGRES_PASSWORD")
+    postgres_host: str = Field(..., env="POSTGRES_HOST")
+    postgres_port: int = Field(..., env="POSTGRES_PORT")
+    postgres_db: str = Field(..., env="POSTGRES_DB")
+    postgres_user: str = Field(..., env="POSTGRES_USER")
+    postgres_password: str = Field(..., env="POSTGRES_PASSWORD")
 
     csrf_token: str = Field(..., env="CSRF_TOKEN")
 
@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         return (
             f"postgresql+asyncpg://"
-            f"{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+            f"{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
     class Config:

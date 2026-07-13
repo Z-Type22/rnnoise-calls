@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from src.users.models import User
 from src.calls.models import Call
-from src.calls.denoise import FrameSplitterTrack
+from src.calls.denoise import DenoiseFrameTrack
 from src.calls.schemas import CalleeSchema, CallCreate, UserRead
 from src.calls.utils import get_user_and_call, cleanup_peer
 from src.types import Peer
@@ -54,7 +54,7 @@ async def offer(websocket: WebSocket, user: User, db: AsyncSession) -> None:
         if track.kind != "audio": return
 
         print(f"[{call_id}] audio track from {user.id}")
-        track = FrameSplitterTrack(track)
+        track = DenoiseFrameTrack(track)
         relayed = relay.subscribe(track)
 
         for p in rooms[call_id]:

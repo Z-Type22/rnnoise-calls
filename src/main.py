@@ -4,6 +4,7 @@ from fastapi import (
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from fastapi.middleware.cors import CORSMiddleware
+from src.prometheus import setup_prometheus
 from src.calls.router import router as calls_router
 from src.users.router import router as users_router
 from src.auth.router import router as auth_router
@@ -11,6 +12,8 @@ from src.middlewares import CSRFMiddleware
 
 
 app = FastAPI()
+
+setup_prometheus(app)
 
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(
